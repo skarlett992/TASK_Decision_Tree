@@ -1,21 +1,17 @@
 import pandas as pd
 import numpy as np
-max_depth = 6
+
 
 class Vertex:
-    def __init__(self, x, y, depth):
-        self.x, self.y, self.depth = x, y, depth
+    def __init__(self, x, y, depth, feature_index):
+        self.x, self.y, self.depth, self.feature_index = x, y, depth, feature_index
         self.left, self.right = None, None
         self.best_col, self.best_val = None, None
+        self.dict_ginies = {'Pclass': None, 'SibSp': None, 'Parch': None, 'Fare': None, 'Age': None}
+        self.ginies = []
 
         if self.depth < max_depth:
-       #     if self.best_col is not None and self.best_val is not None:
             self.build_subtree()
-
-
-        if self.depth == max_depth-1:
-           self.left = None
-           self.right = None
 
 
     @property
@@ -29,35 +25,60 @@ class Vertex:
 
     def build_subtree(self):
         best_gini, best_col, best_val = float('inf'), None, None
-        for col in self.features:
-            unique_values = np.nan_to_num(self.x[col].unique(), nan=float('inf'))
-            unique_values.sort()
-            for cur_val in unique_values:
-                tmp1 = self.x[col] <= cur_val
-                left = self.y[tmp1]
+        col = self.features[self.feature_index]
 
-                tmp2 = self.x[col] > cur_val
-                right = self.y[tmp2]
+        #for feat in col:
 
-                cur_gini = DecisionTree.gini(left, right)
+        unique_values = np.nan_to_num(self.x[col].unique(), nan=float('inf'))
+        unique_values.sort()
+        len_unique = len(unique_values)
+        value_each_person = self.x[col]
 
-                if cur_gini < best_gini:
-                    # if col is not None and  cur_val is not None:
-                    best_gini = cur_gini
-                    best_col = col
-                    best_val = cur_val
+        for cur_val in unique_values:
+            if len_unique > 4:
+                left_xx = self.x[value_each_person <= cur_val]
+                left_yy = self.y[value_each_person <= cur_val]
 
-        x_gini = self.x[best_col]
+                right_xx = self.x[value_each_person > cur_val]
+                right_yy = self.y[value_each_person > cur_val]
+            else:
+                left_xx = self.x[value_each_person == cur_val]
+                left_yy = self.y[value_each_person == cur_val]
 
-        # if left.size > 0:
-        x_left = self.x[x_gini <= best_val]
-        y_left = self.y[x_gini <= best_val]
-        self.left = Vertex(x_left, y_left, self.depth + 1)
-        # if right.size > 0:
-        x_right = self.x[x_gini > best_val]
-        y_right = self.y[x_gini > best_val]
-        self.right = Vertex(x_right, y_right, self.depth + 1)
+                right_xx = self.x[value_each_person != cur_val]
+                right_yy = self.y[value_each_person != cur_val]
+
+            #подаем данные о нолях и единицах направо и налево, чтобы найти лучший джини текущий
+            cur_gini = DecisionTree.gini(left_yy, right_yy)
+
+            #после того, как он вычислил джини, смотрит, лучший ли он
+            if cur_gini < best_gini:
+                best_gini = cur_gini
+                best_col = col
+                best_val = cur_val
+
+
+
+        self.make_leaves(value_each_person, best_val, len_unique)
         self.best_col, self.best_val = best_col, best_val
+
+    # метод, создающий левый и правый узлы
+    def make_leaves(self, value_each_person, best_val, len_unique):
+        if self.feature_index < len(self.features)-1:
+            if len_unique > 4:
+                left_x = self.x[value_each_person <= best_val]
+                left_y = self.y[value_each_person <= best_val]
+                right_x = self.x[value_each_person > best_val]
+                right_y = self.y[value_each_person > best_val]
+            else:
+                left_x = self.x[value_each_person == best_val]
+                left_y = self.y[value_each_person == best_val]
+                right_x = self.x[value_each_person != best_val]
+                right_y = self.y[value_each_person != best_val]
+
+            self.left = Vertex( left_x, left_y, self.depth + 1, self.feature_index+1)
+            self.right = Vertex( right_x, right_y, self.depth + 1, self.feature_index+1)
+           # self.dict_ginies[self.best_col] = self.best_gini
 
     def get_next_vertex(self, x):
         if x[self.best_col] > self.best_val and self.right is not None:
@@ -69,9 +90,18 @@ class Vertex:
 class DecisionTree:
     def __init__(self):
         self.tree = None
+        self.ginies = []
+
 
     def fit(self, x, y):
-        self.tree = Vertex(x, y, depth=0)
+        self._index = 0
+        #создать новое условие - очередность джини
+        #self.dict_ginies[self.best_col] = self.best_gini
+       # self.features = sorted(self.dict_ginies.items(), key=lambda kv: kv[1])
+        self.tree = Vertex(x, y, depth=0, feature_index=0)
+
+    #def get_best_gini(self):
+
 
     def predict_proba(self, x):
         cur_vertex = self.tree
@@ -92,10 +122,13 @@ class DecisionTree:
         return result
 
 
-
+max_depth = 8
 df = pd.read_csv('train.csv')
-x, y = df[['Pclass', 'Age', 'SibSp', 'Parch', 'Fare']], df['Survived']
+x, y = df[['Pclass', 'SibSp', 'Parch', 'Fare', 'Age']], df['Survived']
 tree = DecisionTree()
+
+# order_features - метод который выстроит фичи в порядке возрастания гини - сортировать словарь здесь
+
 tree.fit(x, y)
 
 for i in range(20):
